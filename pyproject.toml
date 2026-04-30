@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drone-swarm-boids"
+version = "0.1.0"
+description = "A Mesa-based 3D boids-style drone swarm simulator with per-agent MDP transition logging."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+  { name = "Mark M. Bailey, PhD" }
+]
+keywords = ["mesa", "agent-based-modeling", "boids", "swarm", "mdp", "simulation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Artificial Life",
+]
+dependencies = [
+  "mesa>=3.5,<4.0",
+  "numpy>=1.26",
+  "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+  "mypy>=1.10",
+]
+viz = [
+  "matplotlib>=3.8",
+  "plotly>=5.20",
+]
+parquet = [
+  "pyarrow>=15.0",
+]
+
+[project.urls]
+Repository = "https://github.com/DemetersSon83/3D-Drone-Swarm"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drone_swarm"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+mypy_path = "src"
+packages = ["drone_swarm"]
