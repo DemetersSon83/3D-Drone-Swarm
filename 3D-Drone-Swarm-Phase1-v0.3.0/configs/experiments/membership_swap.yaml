@@ -1,0 +1,50 @@
+schema_version: 1
+scenario_id: membership_swap
+paired_control_scenario: membership_swap_sham
+analysis_split: pilot
+description: Eight drones exchange membership between two persistent coalitions.
+run: {steps: 8000, metrics_stride: 10, transition_batch_size: 20000, progress_interval: 1000}
+model:
+  n_drones: 48
+  bounds: [[0.0, 50.0], [0.0, 50.0], [0.0, 25.0]]
+  dt: 0.25
+  perception_radius: 14.0
+  separation_distance: 2.5
+  collision_radius: 0.75
+  max_speed: 3.0
+  max_acceleration: 0.5
+  boundary_mode: bounce
+  boundary_margin: 4.0
+  target_position: [25.0, 25.0, 12.5]
+  activation: staged
+policy: {type: boids, cohesion_weight: 0.025, alignment_weight: 0.05, separation_weight: 0.25, goal_weight: 0.03, boundary_weight: 1.0}
+initialization:
+  positions: {type: gaussian, center: [25.0, 25.0, 12.5], std: [8.0, 8.0, 4.0]}
+  velocities: {type: random}
+agents:
+  initial_coalitions: {strategy: chunks, labels: [A, B]}
+  group_targets:
+    A: [15.0, 25.0, 12.5]
+    B: [35.0, 25.0, 12.5]
+  restrict_interactions_to_coalition: true
+  formation_id: paired_clouds
+phases:
+  - {name: warmup, start: 0, end: 1500}
+  - {name: baseline, start: 1500, end: 4000}
+  - {name: membership_transition, start: 4000, end: 5000}
+  - {name: post_swap, start: 5000}
+events:
+  - id: swap_eight_members
+    kind: coalition_reconfigure
+    intent: planned_reconfiguration
+    schedule: {start: 4000, shape: step}
+    targets: {all: true}
+    parameters:
+      assignments:
+        strategy: swap
+        swaps: [[20, 24], [21, 25], [22, 26], [23, 27]]
+      group_targets:
+        A: [15.0, 25.0, 12.5]
+        B: [35.0, 25.0, 12.5]
+      restrict_interactions_to_coalition: true
+output: {formats: [parquet], write_agent_signals: true}

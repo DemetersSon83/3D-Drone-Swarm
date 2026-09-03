@@ -1,0 +1,138 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "drone-swarm-boids"
+version = "0.3.1"
+description = "A reproducible 3D drone-swarm dataset generator with versioned analytical data contracts."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+  { name = "Mark M. Bailey, PhD" }
+]
+keywords = [
+  "mesa",
+  "agent-based-modeling",
+  "boids",
+  "swarm",
+  "simulation",
+  "mutual-information",
+  "information-theory",
+  "dataset-generation",
+  "parquet",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Artificial Life",
+]
+dependencies = [
+  "mesa>=3.5.1,<4.0",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+parquet = [
+  "pyarrow>=15.0",
+]
+pipeline = [
+  "pyarrow>=15.0",
+  "duckdb>=1.0",
+  "polars>=1.0",
+]
+experiment = [
+  "pyarrow>=15.0",
+]
+viz = [
+  "matplotlib>=3.8",
+  "plotly>=5.20",
+]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.8",
+  "mypy>=1.10",
+]
+all = [
+  "pyarrow>=15.0",
+  "duckdb>=1.0",
+  "polars>=1.0",
+  "matplotlib>=3.8",
+  "plotly>=5.20",
+  "pytest>=8.0",
+  "ruff>=0.8",
+  "mypy>=1.10",
+]
+
+[project.scripts]
+drone-swarm = "drone_swarm.cli:main"
+
+[project.urls]
+Repository = "https://github.com/DemetersSon83/3D-Drone-Swarm"
+Documentation = "https://github.com/DemetersSon83/3D-Drone-Swarm/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drone_swarm"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/configs",
+  "/docs",
+  "/examples",
+  "/scripts",
+  "/src",
+  "/tests",
+  "/CHANGELOG.md",
+  "/CITATION.cff",
+  "/LICENSE",
+  "/Makefile",
+  "/README.md",
+  "/pyproject.toml",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = [
+  "integration: requires the Mesa runtime and exercises a full simulation",
+  "pipeline: requires optional analytical-pipeline dependencies",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "examples", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+mypy_path = "src"
+packages = ["drone_swarm"]
+
+# Optional analytics packages do not all ship complete, version-aligned type
+# information. Keep strict checking for this project while treating those
+# external module boundaries as dynamically typed.
+[[tool.mypy.overrides]]
+module = [
+  "pandas",
+  "pandas.*",
+  "pyarrow",
+  "pyarrow.*",
+  "polars",
+  "polars.*",
+]
+ignore_missing_imports = true

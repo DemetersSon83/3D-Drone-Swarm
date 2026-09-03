@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "Please cite this repository and the associated Phi Spectral publications when using generated datasets."
+title: "3D Drone Swarm: Reproducible Swarm Dataset Generator"
+type: software
+version: 0.3.1
+date-released: 2026-09-02
+authors:
+  - family-names: Bailey
+    given-names: Mark M.
+    suffix: PhD
+repository-code: "https://github.com/DemetersSon83/3D-Drone-Swarm"
+license: MIT
+keywords:
+  - drone swarm
+  - agent-based modeling
+  - boids
+  - mutual information
+  - Phi Spectral
+  - bipredictability
+  - reproducible simulation

@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datafieldintelligence.com/schemas/drone-swarm/scenario-v1.json",
+  "title": "Drone Swarm Scenario",
+  "description": "Configuration contract for one reproducible swarm simulation condition.",
+  "type": "object",
+  "required": ["schema_version", "scenario_id", "run", "model"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "analysis_split": {"type": "string"},
+    "paired_control_scenario": {"type": ["string", "null"]},
+    "paired_treatment_scenario": {"type": ["string", "null"]},
+    "run": {
+      "type": "object",
+      "required": ["steps"],
+      "properties": {
+        "steps": {"type": "integer", "minimum": 1},
+        "metrics_stride": {"type": "integer", "minimum": 1, "default": 10},
+        "transition_batch_size": {"type": "integer", "minimum": 1, "default": 20000},
+        "progress_interval": {"type": "integer", "minimum": 0, "default": 0}
+      },
+      "additionalProperties": true
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "n_drones": {"type": "integer", "minimum": 0, "default": 48},
+        "bounds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {"type": "number"}
+          }
+        },
+        "dt": {"type": "number", "exclusiveMinimum": 0, "default": 0.25},
+        "perception_radius": {"type": "number", "exclusiveMinimum": 0},
+        "separation_distance": {"type": "number", "minimum": 0},
+        "collision_radius": {"type": "number", "minimum": 0},
+        "max_speed": {"type": "number", "minimum": 0},
+        "max_acceleration": {"type": "number", "minimum": 0},
+        "torus": {"type": "boolean"},
+        "boundary_mode": {"enum": ["clip", "bounce", "wrap"]},
+        "boundary_margin": {"type": "number", "minimum": 0},
+        "target_position": {"$ref": "#/$defs/vector3"},
+        "activation": {"enum": ["staged", "random"]},
+        "battery_initial": {"type": ["number", "null"]},
+        "battery_drain_per_tick": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["boids", "hold", "random_acceleration"]},
+        "cohesion_weight": {"type": "number"},
+        "alignment_weight": {"type": "number"},
+        "separation_weight": {"type": "number"},
+        "goal_weight": {"type": "number"},
+        "boundary_weight": {"type": "number"},
+        "scale": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "initialization": {
+      "type": "object",
+      "properties": {
+        "positions": {"$ref": "#/$defs/sampler"},
+        "velocities": {"$ref": "#/$defs/sampler"}
+      },
+      "additionalProperties": true
+    },
+    "agents": {"type": "object", "additionalProperties": true},
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "start"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "start": {"type": "integer", "minimum": 0},
+          "end": {"type": ["integer", "null"], "minimum": 0}
+        },
+        "additionalProperties": true
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"}
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "formats": {
+          "oneOf": [
+            {"enum": ["parquet", "csv", "jsonl"]},
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"enum": ["parquet", "csv", "jsonl"]}
+            }
+          ]
+        },
+        "write_agent_signals": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "vector3": {
+      "type": ["array", "null"],
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"type": "number"}
+    },
+    "sampler": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {"type": {"type": "string"}},
+      "additionalProperties": true
+    },
+    "event": {
+      "type": "object",
+      "required": ["id", "kind", "schedule"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {
+          "enum": [
+            "observation_noise",
+            "observation_bias",
+            "observation_quantization",
+            "perception_radius_scale",
+            "communication_dropout",
+            "communication_partition",
+            "policy_weight_scale",
+            "random_action",
+            "hold_command",
+            "actuator_gain",
+            "actuator_noise",
+            "actuator_bias",
+            "actuator_stuck_axis",
+            "actuator_saturation",
+            "wind",
+            "target_shift",
+            "coalition_reconfigure"
+          ]
+        },
+        "intent": {"type": "string"},
+        "description": {"type": "string"},
+        "schedule": {
+          "type": "object",
+          "required": ["start"],
+          "properties": {
+            "start": {"type": "integer", "minimum": 0},
+            "end": {"type": ["integer", "null"], "minimum": 0},
+            "shape": {"enum": ["step", "ramp", "pulse", "intermittent"]},
+            "ramp_steps": {"type": ["integer", "null"], "minimum": 1},
+            "period": {"type": ["integer", "null"], "minimum": 1},
+            "duty_cycle": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+          },
+          "additionalProperties": true
+        },
+        "targets": {"type": "object", "additionalProperties": true},
+        "parameters": {"type": "object", "additionalProperties": true},
+        "restore": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

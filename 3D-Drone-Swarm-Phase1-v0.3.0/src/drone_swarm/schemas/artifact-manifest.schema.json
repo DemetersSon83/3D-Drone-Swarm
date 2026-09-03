@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datafieldintelligence.com/schemas/drone-swarm/artifact-manifest-v1.json",
+  "title": "Drone Swarm Run Artifact Manifest",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "run_id",
+    "scenario_id",
+    "resources"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "scenario_id": {
+      "type": "string"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "primary_key",
+          "files"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "primary_key": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "format",
+                "sha256",
+                "row_count",
+                "columns"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "format": {
+                  "enum": [
+                    "parquet",
+                    "csv",
+                    "jsonl"
+                  ]
+                },
+                "media_type": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "row_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "column_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "schema_fingerprint": {
+                  "type": "string"
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "global_primary_key": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
