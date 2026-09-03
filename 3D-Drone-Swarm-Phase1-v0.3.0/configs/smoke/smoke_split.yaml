@@ -1,0 +1,41 @@
+schema_version: 1
+scenario_id: smoke_split
+analysis_split: smoke
+run:
+  steps: 20
+  metrics_stride: 2
+  transition_batch_size: 16
+model:
+  n_drones: 6
+  bounds: [[0.0, 12.0], [0.0, 12.0], [0.0, 6.0]]
+  dt: 0.25
+  perception_radius: 6.0
+  separation_distance: 1.0
+  collision_radius: 0.4
+  max_speed: 2.0
+  max_acceleration: 0.5
+  boundary_mode: bounce
+  boundary_margin: 1.0
+  target_position: [6.0, 6.0, 3.0]
+  activation: staged
+policy: {type: boids}
+initialization:
+  positions: {type: gaussian, center: [6.0, 6.0, 3.0], std: [1.5, 1.5, 0.75]}
+  velocities: {type: random}
+agents:
+  initial_coalitions: {strategy: single, label: all}
+phases:
+  - {name: warmup, start: 0, end: 5}
+  - {name: baseline, start: 5, end: 10}
+  - {name: split, start: 10}
+events:
+  - id: split
+    kind: coalition_reconfigure
+    intent: planned_reconfiguration
+    schedule: {start: 10, shape: step}
+    targets: {all: true}
+    parameters:
+      assignments: {strategy: chunks, labels: [A, B]}
+      group_targets: {A: [3.0, 6.0, 3.0], B: [9.0, 6.0, 3.0]}
+      restrict_interactions_to_coalition: true
+output: {formats: [csv, jsonl], write_agent_signals: true}

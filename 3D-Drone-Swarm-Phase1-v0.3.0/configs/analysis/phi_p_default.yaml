@@ -1,0 +1,65 @@
+schema_version: 1
+observer_id: phi_p_default_v1
+fit_on_phase_patterns: ["baseline*"]
+freeze_after_fit: true
+standardization:
+  method: robust_zscore
+  center: median
+  scale: mad
+  fit_scope: healthy_calibration_runs
+windows:
+  candidate_lengths: [256, 512, 1024]
+  primary_length: 512
+  stride: 128
+mutual_information:
+  estimator: discrete_histogram
+  candidate_bins: [3, 5, 8]
+  primary_bins: 5
+  bin_edges: baseline_fixed_quantiles
+  pseudocount: 0.5
+  null_model: block_circular_shift
+  null_replicates: 200
+phi_spectral:
+  source_table: agent_signals
+  feature_views:
+    ego_kinematic:
+      - velocity_relative_swarm_mean
+      - position_relative_swarm_centroid
+      - speed
+    local_interaction:
+      - position_relative_local_centroid
+      - velocity_relative_local_average
+      - neighbor_count
+      - nearest_neighbor_distance
+    control:
+      - commanded_acceleration
+      - applied_acceleration
+      - boids_component_magnitudes
+  save_pairwise_mi: true
+  save_fiedler_vector: true
+  recursive_partitioning: true
+  bootstrap_replicates: 200
+  invalid_partition_rules:
+    min_eigengap: 0.001
+    min_within_across_ratio: 1.05
+    min_bootstrap_assignment_probability: 0.70
+bipredictability:
+  source_table: agent_signals
+  views:
+    controller:
+      state_prefix: observed_state
+      action_prefix: commanded_action
+      next_state_prefix: observed_next_state
+    plant:
+      state_prefix: true_state
+      action_prefix: applied_action
+      next_state_prefix: true_next_state
+  canonical_transition_aliases:
+    controller: {state_prefix: s, action_prefix: a, next_state_prefix: sp}
+    plant: {state_prefix: true_s, action_prefix: applied_a, next_state_prefix: true_sp}
+  scales: [agent, planted_coalition, fiedler_coalition, swarm_macro]
+  candidate_bins: [3, 5, 8]
+  primary_bins: 5
+  report: [P, H_f, H_b, delta_H]
+  baseline_relative: true
+  threshold_fit_scope: healthy_calibration_runs

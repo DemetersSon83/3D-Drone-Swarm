@@ -1,0 +1,46 @@
+schema_version: 1
+scenario_id: observation_noise_ramp
+paired_control_scenario: nominal_boids
+analysis_split: pilot
+description: Gradual sensor noise affecting self and local-neighborhood summaries.
+run: {steps: 8000, metrics_stride: 10, transition_batch_size: 20000, progress_interval: 1000}
+model:
+  n_drones: 48
+  bounds: [[0.0, 50.0], [0.0, 50.0], [0.0, 25.0]]
+  dt: 0.25
+  perception_radius: 14.0
+  separation_distance: 2.5
+  collision_radius: 0.75
+  max_speed: 3.0
+  max_acceleration: 0.5
+  boundary_mode: bounce
+  boundary_margin: 4.0
+  target_position: [25.0, 25.0, 12.5]
+  activation: staged
+policy: {type: boids, cohesion_weight: 0.025, alignment_weight: 0.05, separation_weight: 0.25, goal_weight: 0.02, boundary_weight: 1.0}
+initialization:
+  positions: {type: gaussian, center: [25.0, 25.0, 12.5], std: [8.0, 8.0, 4.0]}
+  velocities: {type: random}
+agents:
+  initial_coalitions: {strategy: single, label: all}
+  restrict_interactions_to_coalition: false
+  formation_id: cloud
+phases:
+  - {name: warmup, start: 0, end: 1500}
+  - {name: baseline, start: 1500, end: 4000}
+  - {name: degradation_ramp, start: 4000, end: 5000}
+  - {name: degraded, start: 5000}
+events:
+  - id: sensor_noise_all
+    kind: observation_noise
+    intent: fault
+    schedule: {start: 4000, shape: ramp, ramp_steps: 1000}
+    targets: {all: true}
+    parameters:
+      position_std: [0.60, 0.60, 0.30]
+      velocity_std: [0.18, 0.18, 0.18]
+      centroid_std: [0.60, 0.60, 0.30]
+      average_velocity_std: [0.18, 0.18, 0.18]
+      separation_std: [0.10, 0.10, 0.10]
+      target_std: [0.40, 0.40, 0.20]
+output: {formats: [parquet], write_agent_signals: true}

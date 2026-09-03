@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://datafieldintelligence.com/schemas/drone-swarm/dataset-catalog-v1.json",
+  "title": "Drone Swarm Dataset Catalog",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "dataset_id",
+    "run_count",
+    "manifest",
+    "tables"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string"
+    },
+    "dataset_id": {
+      "type": "string"
+    },
+    "generated_at_utc": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string"
+    },
+    "run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "manifest": {
+      "type": "object",
+      "required": [
+        "csv"
+      ],
+      "properties": {
+        "csv": {
+          "type": "string"
+        },
+        "parquet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "tables": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "description",
+          "preferred_format",
+          "path_globs"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "primary_key_within_run": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preferred_format": {
+            "enum": [
+              "parquet",
+              "csv",
+              "jsonl"
+            ]
+          },
+          "path_globs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "global_primary_key": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "schema_registry": {
+      "type": "string"
+    },
+    "datapackage": {
+      "type": "string"
+    },
+    "dataset_card": {
+      "type": "string"
+    },
+    "quality_report": {
+      "type": "string"
+    },
+    "checksums": {
+      "type": "string"
+    },
+    "duckdb_views": {
+      "type": "string"
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}
