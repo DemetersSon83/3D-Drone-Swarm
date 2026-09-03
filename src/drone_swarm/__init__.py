@@ -1,10 +1,10 @@
-"""Drone swarm boids simulation package.
+"""Reproducible drone-swarm simulation and dataset-generation package.
 
-The package intentionally keeps Mesa-dependent imports out of ``__init__`` so
-MDP schemas, physics helpers, and IO utilities remain importable in lightweight
-analysis environments.
+Mesa-dependent imports stay out of :mod:`drone_swarm` so data contracts,
+loaders, scenario validation, and artifact inspection remain importable in
+lightweight analytical environments.
 """
 
 __all__ = ["__version__"]
 
-__version__ = "0.1.0"
+__version__ = "0.3.1"

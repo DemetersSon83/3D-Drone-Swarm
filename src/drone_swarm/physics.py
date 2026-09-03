@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeAlias
+from typing import Literal, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-FloatArray: TypeAlias = NDArray[np.float64]
-BoundaryMode: TypeAlias = Literal["clip", "bounce", "wrap"]
+type FloatArray = NDArray[np.float64]
+type BoundaryMode = Literal["clip", "bounce", "wrap"]
 
 
 def as_vector3(value: ArrayLike, *, name: str = "vector") -> FloatArray:
@@ -48,7 +48,7 @@ def unit_vector(vector: ArrayLike, *, eps: float = 1e-12) -> FloatArray:
     magnitude = np.linalg.norm(vector_array)
     if magnitude <= eps:
         return np.zeros_like(vector_array, dtype=float)
-    return (vector_array / magnitude).astype(float, copy=False)
+    return cast(FloatArray, (vector_array / magnitude).astype(float, copy=False))
 
 
 def clip_norm(vector: ArrayLike, max_norm: float) -> FloatArray:
@@ -60,7 +60,7 @@ def clip_norm(vector: ArrayLike, max_norm: float) -> FloatArray:
     magnitude = np.linalg.norm(vector_array)
     if magnitude == 0 or magnitude <= max_norm:
         return vector_array.astype(float, copy=True)
-    return (vector_array / magnitude * max_norm).astype(float, copy=False)
+    return cast(FloatArray, (vector_array / magnitude * max_norm).astype(float, copy=False))
 
 
 def steer_toward(
@@ -73,7 +73,7 @@ def steer_toward(
 
     desired_direction = unit_vector(np.asarray(target_position) - np.asarray(current_position))
     desired_velocity = desired_direction * max_speed
-    return desired_velocity - np.asarray(current_velocity, dtype=float)
+    return cast(FloatArray, desired_velocity - np.asarray(current_velocity, dtype=float))
 
 
 def integrate_kinematics(
@@ -130,9 +130,9 @@ def apply_boundary(
         clipped_position = np.clip(position_array, low, high)
         clipped_velocity = velocity_array.copy()
         for axis in range(3):
-            if position_array[axis] < low[axis] and clipped_velocity[axis] < 0:
-                clipped_velocity[axis] = 0.0
-            elif position_array[axis] > high[axis] and clipped_velocity[axis] > 0:
+            moving_outside_low = position_array[axis] < low[axis] and clipped_velocity[axis] < 0
+            moving_outside_high = position_array[axis] > high[axis] and clipped_velocity[axis] > 0
+            if moving_outside_low or moving_outside_high:
                 clipped_velocity[axis] = 0.0
         return clipped_position, clipped_velocity
 
@@ -154,7 +154,9 @@ def apply_boundary(
 
             guard += 1
             if guard > 10_000:  # pragma: no cover - pathological overshoot protection
-                bounced_position[axis] = low[axis] + np.mod(bounced_position[axis] - low[axis], width[axis])
+                bounced_position[axis] = low[axis] + np.mod(
+                    bounced_position[axis] - low[axis], width[axis]
+                )
                 break
 
     return bounced_position, bounced_velocity

@@ -1,13 +1,49 @@
-"""Input/output helpers for transition logs and telemetry."""
+"""Input/output helpers for transition logs and experiment telemetry."""
 
 from __future__ import annotations
 
+import csv
+import hashlib
 import json
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
-from drone_swarm.mdp import Transition, transition_to_row
+from drone_swarm.mdp import DroneAction, DroneState, Transition, transition_to_row
+
+# Seeds are generated as unsigned 64-bit values.  PyArrow infers a Python
+# ``int`` template value such as 0 as signed int64, which cannot represent
+# roughly half of the deterministic seed space.  Keep the physical Parquet
+# type aligned with the scientific seed contract instead of truncating or
+# remapping seeds.
+_UINT64_COLUMN_NAMES = frozenset(
+    {
+        "base_seed",
+        "initialization_seed",
+        "policy_seed",
+        "perturbation_seed",
+    }
+)
+
+
+def _arrow_schema_from_template(pa: Any, template: Mapping[str, Any]) -> Any:
+    """Infer a stable Arrow schema, forcing seed columns to unsigned 64-bit.
+
+    ``stable_seed`` intentionally spans the full ``[0, 2**64 - 1]`` range.
+    Arrow's default inference chooses signed int64 for a small template value,
+    so later records may fail with ``Python int too large to convert to C long``.
+    This helper preserves the full deterministic seed value in Parquet.
+    """
+
+    inferred = pa.Table.from_pylist([dict(template)]).schema
+    fields: list[Any] = []
+    for field in inferred:
+        if field.name in _UINT64_COLUMN_NAMES:
+            fields.append(field.with_type(pa.uint64()))
+        else:
+            fields.append(field)
+    return pa.schema(fields, metadata=inferred.metadata)
 
 
 def ensure_parent_dir(path: str | Path) -> Path:
@@ -24,7 +60,7 @@ def transitions_to_rows(transitions: Iterable[Transition]) -> list[dict[str, Any
     return [transition_to_row(transition) for transition in transitions]
 
 
-def transitions_to_dataframe(transitions: Iterable[Transition]):  # type: ignore[no-untyped-def]
+def transitions_to_dataframe(transitions: Iterable[Transition]) -> Any:
     """Convert transitions to a pandas DataFrame."""
 
     import pandas as pd
@@ -59,3 +95,358 @@ def write_transitions_parquet(transitions: Iterable[Transition], path: str | Pat
     output_path = ensure_parent_dir(path)
     df = transitions_to_dataframe(transitions)
     df.to_parquet(output_path, index=False)
+
+
+def atomic_write_json(path: str | Path, value: object) -> None:
+    """Write JSON to a sibling temporary file and atomically replace *path*."""
+
+    output_path = ensure_parent_dir(path)
+    temporary = output_path.with_name(f".{output_path.name}.tmp-{os.getpid()}")
+    with temporary.open("w", encoding="utf-8") as file_obj:
+        json.dump(value, file_obj, indent=2, sort_keys=True, default=str)
+        file_obj.write("\n")
+    os.replace(temporary, output_path)
+
+
+def write_records_csv(
+    records: Sequence[Mapping[str, Any]],
+    path: str | Path,
+    *,
+    columns: Sequence[str] | None = None,
+    template: Mapping[str, Any] | None = None,
+) -> None:
+    import pandas as pd
+
+    output_path = ensure_parent_dir(path)
+    selected_columns = (
+        list(columns) if columns is not None else list(template) if template is not None else None
+    )
+    frame = pd.DataFrame(records, columns=selected_columns)
+    frame.to_csv(output_path, index=False)
+
+
+def write_records_parquet(
+    records: Sequence[Mapping[str, Any]],
+    path: str | Path,
+    *,
+    columns: Sequence[str] | None = None,
+    template: Mapping[str, Any] | None = None,
+) -> None:
+    """Write records to compressed Parquet, optionally using a fixed type template.
+
+    A representative non-null ``template`` prevents empty or all-null run tables
+    from acquiring Arrow ``null`` columns. This keeps side-table schemas stable
+    across nominal and perturbed runs.
+    """
+
+    output_path = ensure_parent_dir(path)
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except ImportError as exc:  # pragma: no cover - depends on optional package
+        raise RuntimeError(
+            "Parquet output requires PyArrow. Install with: python -m pip install -e '.[parquet]'"
+        ) from exc
+
+    if columns is not None:
+        selected_columns = list(columns)
+    elif template is not None:
+        selected_columns = list(template)
+    else:
+        selected_columns = list(records[0]) if records else []
+
+    normalized = [{column: record.get(column) for column in selected_columns} for record in records]
+    if template is not None:
+        normalized_template = {column: template.get(column) for column in selected_columns}
+        schema = _arrow_schema_from_template(pa, normalized_template)
+        table = pa.Table.from_pylist(normalized, schema=schema)
+    else:
+        table = pa.Table.from_pylist(normalized)
+    pq.write_table(table, output_path, compression="zstd", use_dictionary=True)
+
+
+def sha256_file(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file_obj:
+        while chunk := file_obj.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _template_transition_row() -> dict[str, Any]:
+    state = DroneState(
+        position=(0.0, 0.0, 0.0),
+        velocity=(0.0, 0.0, 0.0),
+        speed=0.0,
+        neighbor_count=1,
+        nearest_neighbor_distance=1.0,
+        local_centroid=(0.0, 0.0, 0.0),
+        local_average_velocity=(0.0, 0.0, 0.0),
+        neighbor_ids=(1,),
+        local_separation=(0.0, 0.0, 0.0),
+        target_vector=(0.0, 0.0, 0.0),
+        battery=1.0,
+        mode="nominal",
+    )
+    components = {
+        name: (0.0, 0.0, 0.0)
+        for name in ("cohesion", "alignment", "separation", "goal", "boundary")
+    }
+    action = DroneAction(
+        acceleration=(0.0, 0.0, 0.0),
+        raw_acceleration=(0.0, 0.0, 0.0),
+        components=components,
+        metadata={"template": True},
+    )
+    transition = Transition(
+        episode_id="template",
+        step=0,
+        agent_id=1,
+        state=state,
+        action=action,
+        next_state=state,
+        reward=0.0,
+        done=False,
+        true_state=state,
+        applied_action=action,
+        environment_acceleration=(0.0, 0.0, 0.0),
+        true_next_state=state,
+        phase="template",
+        active_event_ids=("template",),
+        agent_affected=True,
+        coalition_truth="template",
+        role_truth="template",
+        formation_truth="template",
+        target_id="template",
+        info={"agent_index": 0},
+    )
+    return transition_to_row(transition)
+
+
+class StreamingTransitionWriter:
+    """Stream transitions to Parquet, CSV, and/or nested JSONL.
+
+    Parquet is written as one file with bounded memory and stable column types.
+    The fixed schema is inferred from a fully populated template row, avoiding
+    the common failure where an all-null first batch locks a later string column
+    to Arrow's null type.
+    """
+
+    def __init__(
+        self,
+        output_dir: str | Path,
+        *,
+        formats: Sequence[str] = ("parquet",),
+        batch_size: int = 20_000,
+    ) -> None:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        normalized = tuple(dict.fromkeys(str(value).lower() for value in formats))
+        unsupported = set(normalized).difference({"parquet", "csv", "jsonl"})
+        if unsupported:
+            raise ValueError(f"unsupported transition formats: {sorted(unsupported)}")
+        if not normalized:
+            raise ValueError("at least one transition format is required")
+
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.formats = normalized
+        self.batch_size = batch_size
+        self.row_count = 0
+        self._buffer: list[dict[str, Any]] = []
+        self._template = _template_transition_row()
+        self._columns = list(self._template)
+        self._csv_file: TextIO | None = None
+        self._csv_writer: csv.DictWriter[str] | None = None
+        self._jsonl_file: TextIO | None = None
+        self._parquet_writer: Any = None
+        self._parquet_schema: Any = None
+
+        if "csv" in self.formats:
+            self._csv_file = (self.output_dir / "transitions.csv").open(
+                "w", newline="", encoding="utf-8"
+            )
+            self._csv_writer = csv.DictWriter(
+                self._csv_file,
+                fieldnames=self._columns,
+                extrasaction="ignore",
+            )
+            self._csv_writer.writeheader()
+
+        if "jsonl" in self.formats:
+            self._jsonl_file = (self.output_dir / "transitions.jsonl").open("w", encoding="utf-8")
+
+        if "parquet" in self.formats:
+            try:
+                import pyarrow as pa
+                import pyarrow.parquet as pq
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise RuntimeError(
+                    "Parquet output requires PyArrow. Install with: "
+                    "python -m pip install -e '.[parquet]'"
+                ) from exc
+            self._parquet_schema = _arrow_schema_from_template(pa, self._template)
+            self._parquet_writer = pq.ParquetWriter(
+                self.output_dir / "transitions.parquet",
+                self._parquet_schema,
+                compression="zstd",
+                use_dictionary=True,
+            )
+
+    @property
+    def output_paths(self) -> list[Path]:
+        return [self.output_dir / f"transitions.{value}" for value in self.formats]
+
+    def write(self, transition: Transition) -> None:
+        if self._jsonl_file is not None:
+            self._jsonl_file.write(
+                json.dumps(transition.to_dict(), sort_keys=True, default=str) + "\n"
+            )
+        self._buffer.append(transition_to_row(transition))
+        self.row_count += 1
+        if len(self._buffer) >= self.batch_size:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._buffer:
+            return
+        normalized_rows = [
+            {column: row.get(column) for column in self._columns} for row in self._buffer
+        ]
+        if self._csv_writer is not None:
+            self._csv_writer.writerows(normalized_rows)
+            assert self._csv_file is not None
+            self._csv_file.flush()
+        if self._parquet_writer is not None:
+            import pyarrow as pa
+
+            table = pa.Table.from_pylist(normalized_rows, schema=self._parquet_schema)
+            self._parquet_writer.write_table(table)
+        self._buffer.clear()
+
+    def close(self) -> None:
+        self.flush()
+        if self._csv_file is not None:
+            self._csv_file.close()
+            self._csv_file = None
+        if self._jsonl_file is not None:
+            self._jsonl_file.close()
+            self._jsonl_file = None
+        if self._parquet_writer is not None:
+            self._parquet_writer.close()
+            self._parquet_writer = None
+
+    def __enter__(self) -> StreamingTransitionWriter:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        self.close()
+
+
+class StreamingRecordWriter:
+    """Stream a fixed-schema mapping projection to Parquet and/or CSV."""
+
+    def __init__(
+        self,
+        output_dir: str | Path,
+        *,
+        stem: str,
+        template: Mapping[str, Any],
+        formats: Sequence[str] = ("parquet",),
+        batch_size: int = 20_000,
+    ) -> None:
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        if not stem or "/" in stem or "\\" in stem:
+            raise ValueError("stem must be a simple non-empty filename stem")
+        normalized = tuple(dict.fromkeys(str(item).lower() for item in formats))
+        unsupported = set(normalized).difference({"parquet", "csv"})
+        if unsupported:
+            raise ValueError(f"unsupported record formats: {sorted(unsupported)}")
+        if not normalized:
+            raise ValueError("StreamingRecordWriter requires parquet and/or csv")
+
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.stem = stem
+        self.formats = normalized
+        self.batch_size = batch_size
+        self.row_count = 0
+        self._template = dict(template)
+        self._columns = tuple(self._template)
+        self._buffer: list[dict[str, Any]] = []
+        self._csv_file: TextIO | None = None
+        self._csv_writer: csv.DictWriter[str] | None = None
+        self._parquet_writer: Any = None
+        self._parquet_schema: Any = None
+
+        if "csv" in self.formats:
+            self._csv_file = (self.output_dir / f"{stem}.csv").open(
+                "w", newline="", encoding="utf-8"
+            )
+            self._csv_writer = csv.DictWriter(
+                self._csv_file,
+                fieldnames=self._columns,
+                extrasaction="ignore",
+            )
+            self._csv_writer.writeheader()
+
+        if "parquet" in self.formats:
+            try:
+                import pyarrow as pa
+                import pyarrow.parquet as pq
+            except ImportError as exc:  # pragma: no cover - optional dependency
+                raise RuntimeError(
+                    "Parquet output requires PyArrow. Install with: "
+                    "python -m pip install -e '.[pipeline]'"
+                ) from exc
+            self._parquet_schema = _arrow_schema_from_template(pa, self._template)
+            self._parquet_writer = pq.ParquetWriter(
+                self.output_dir / f"{stem}.parquet",
+                self._parquet_schema,
+                compression="zstd",
+                use_dictionary=True,
+            )
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return self._columns
+
+    @property
+    def output_paths(self) -> list[Path]:
+        return [self.output_dir / f"{self.stem}.{value}" for value in self.formats]
+
+    def write(self, record: Mapping[str, Any]) -> None:
+        self._buffer.append({column: record.get(column) for column in self._columns})
+        self.row_count += 1
+        if len(self._buffer) >= self.batch_size:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._buffer:
+            return
+        if self._csv_writer is not None:
+            self._csv_writer.writerows(self._buffer)
+            assert self._csv_file is not None
+            self._csv_file.flush()
+        if self._parquet_writer is not None:
+            import pyarrow as pa
+
+            table = pa.Table.from_pylist(self._buffer, schema=self._parquet_schema)
+            self._parquet_writer.write_table(table)
+        self._buffer.clear()
+
+    def close(self) -> None:
+        self.flush()
+        if self._csv_file is not None:
+            self._csv_file.close()
+            self._csv_file = None
+        if self._parquet_writer is not None:
+            self._parquet_writer.close()
+            self._parquet_writer = None
+
+    def __enter__(self) -> StreamingRecordWriter:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        self.close()

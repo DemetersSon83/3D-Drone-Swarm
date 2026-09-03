@@ -10,7 +10,11 @@ The default model uses staged, simultaneous-style activation:
 4. Every drone commits movement.
 5. Every drone observes `S_{t+1}` and appends a transition record.
 
-This avoids order artifacts in the MDP log. The alternate `activation="random"` mode is still provided for experiments where asynchronous behavior is desired.
+The Phase I experiment layer inserts explicit observation, communication, policy,
+actuator, and environment boundaries into that lifecycle. This avoids order
+artifacts and preserves aligned controller-facing and plant-facing interaction
+tokens. The alternate `activation="random"` mode remains available as an
+asynchrony stress condition.
 
 ## State definition
 
@@ -19,20 +23,25 @@ This avoids order artifacts in the MDP log. The alternate `activation="random"` 
 - position vector `(x, y, z)`
 - velocity vector `(vx, vy, vz)`
 - scalar speed
-- neighbor count within the perception radius
+- neighbor count within the effective perception radius
 - nearest-neighbor distance
 - local neighbor centroid
 - local average neighbor velocity
+- perceived neighbor IDs
+- local separation steering summary
 - optional target vector
 - optional battery value and mode label
 
 ## Action definition
 
-`DroneAction` currently uses a continuous acceleration vector `(ax, ay, az)`. The boids policy stores interpretable components for cohesion, alignment, separation, target seeking, and boundary avoidance.
+`DroneAction` uses a continuous acceleration vector `(ax, ay, az)`. The boids
+policy stores interpretable components for cohesion, alignment, separation,
+target seeking, and boundary avoidance. A transition stores both commanded and
+applied actions so controller changes can be distinguished from actuator faults.
 
 ## Transition export
 
-The simulator keeps a nested in-memory `Transition` log and provides two export forms:
-
-- JSON Lines: nested, faithful `S, A, S'` objects
-- CSV/Parquet: flattened scalar columns for analytics and machine-learning pipelines
+The canonical run artifact is Parquet. CSV and nested JSON Lines are optional.
+The experiment runner streams records in bounded batches rather than retaining a
+full run in memory. It also emits a compact `agent_signals` projection, run-level
+provenance, artifact inventories, quality reports, and dataset-level catalogs.

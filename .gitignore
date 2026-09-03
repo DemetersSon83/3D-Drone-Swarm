@@ -1,2 +1,35 @@
+# Python environments and bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Tool caches and reports
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated experiment data and transient runs
+outputs/
+*.partial-*/
 temp/
+
+# Local logs and scratch files
+*.log
+*.tmp
+
+# Release bundles and accidentally nested source trees
 *.zip
+*.tar.gz
+3D-Drone-Swarm-Phase1-v*/

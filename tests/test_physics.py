@@ -3,7 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from drone_swarm.physics import apply_boundary, as_bounds3, as_vector3, clip_norm, integrate_kinematics
+from drone_swarm.physics import (
+    apply_boundary,
+    as_bounds3,
+    as_vector3,
+    clip_norm,
+    integrate_kinematics,
+)
 
 
 def test_as_vector3_validates_shape() -> None:

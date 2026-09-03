@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
-from drone_swarm.mdp import DroneAction, Vector3, vector3
+from drone_swarm.mdp import ActionType, DroneAction, Vector3, vector3
 from drone_swarm.physics import (
     boundary_avoidance_acceleration,
     clip_norm,
     steer_toward,
-    unit_vector,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -26,7 +25,7 @@ def _to_vector3_tuple(value: np.ndarray) -> Vector3:
 
 
 class ActionPolicy(Protocol):
-    """Protocol for policies that map ``state`` to an action."""
+    """Protocol for policies that map a logged ``DroneState`` to an action."""
 
     def select_action(
         self,
@@ -57,7 +56,8 @@ class HoldPolicy:
 class RandomAccelerationPolicy:
     """Random exploratory acceleration policy.
 
-    This is useful for testing transition capture and baseline comparisons.
+    Policy randomness uses the model's policy-specific RNG stream, which is
+    independent from initialization and perturbation streams.
     """
 
     scale: float = 1.0
@@ -70,7 +70,7 @@ class RandomAccelerationPolicy:
         model: DroneSwarmModel,
     ) -> DroneAction:
         del state, agent
-        raw = model.np_random.normal(loc=0.0, scale=self.scale, size=3)
+        raw = model.policy_rng.normal(loc=0.0, scale=self.scale, size=3)
         clipped = np.linalg.norm(raw) > model.max_acceleration
         acceleration = clip_norm(raw, model.max_acceleration)
         return DroneAction(
@@ -85,9 +85,9 @@ class RandomAccelerationPolicy:
 class BoidsPolicy:
     """Continuous 3D boids steering policy.
 
-    The selected action is a bounded acceleration vector composed of interpretable
-    steering components: cohesion, alignment, separation, goal seeking, and
-    boundary avoidance.
+    The policy intentionally consumes only the supplied, logged ``DroneState``.
+    It no longer queries hidden neighbor objects.  ``local_separation`` is the
+    sufficient steering vector computed by the observation layer.
     """
 
     cohesion_weight: float = 0.025
@@ -103,52 +103,46 @@ class BoidsPolicy:
         agent: DroneAgent,
         model: DroneSwarmModel,
     ) -> DroneAction:
-        del state
+        del agent
 
-        neighbors, distances = agent.get_neighbors_in_radius(model.perception_radius)
-        position = np.asarray(agent.position, dtype=float)
-        velocity = np.asarray(agent.velocity, dtype=float)
+        position = np.asarray(state.position, dtype=float)
+        velocity = np.asarray(state.velocity, dtype=float)
+        has_neighbors = state.neighbor_count > 0
 
         components: dict[str, Vector3] = {}
         acceleration = np.zeros(3, dtype=float)
 
-        if neighbors:
-            neighbor_positions = np.asarray([neighbor.position for neighbor in neighbors], dtype=float)
-            neighbor_velocities = np.asarray([neighbor.velocity for neighbor in neighbors], dtype=float)
-
-            centroid = neighbor_positions.mean(axis=0)
-            avg_velocity = neighbor_velocities.mean(axis=0)
-
-            cohesion = steer_toward(position, velocity, centroid, model.max_speed)
-            alignment = avg_velocity - velocity
-
-            separation = np.zeros(3, dtype=float)
-            for neighbor, distance in zip(neighbors, distances, strict=False):
-                if 0.0 < distance < model.separation_distance:
-                    away = position - np.asarray(neighbor.position, dtype=float)
-                    separation += unit_vector(away) / max(distance, 1e-9)
-            if np.linalg.norm(separation) > 0:
-                separation = steer_toward(
-                    position,
-                    velocity,
-                    position + separation,
-                    model.max_speed,
-                )
-
-            components["cohesion"] = _to_vector3_tuple(cohesion)
-            components["alignment"] = _to_vector3_tuple(alignment)
-            components["separation"] = _to_vector3_tuple(separation)
-
-            acceleration += self.cohesion_weight * cohesion
-            acceleration += self.alignment_weight * alignment
-            acceleration += self.separation_weight * separation
+        if has_neighbors and state.local_centroid is not None:
+            cohesion = steer_toward(
+                position,
+                velocity,
+                np.asarray(state.local_centroid, dtype=float),
+                model.max_speed,
+            )
         else:
-            components["cohesion"] = (0.0, 0.0, 0.0)
-            components["alignment"] = (0.0, 0.0, 0.0)
-            components["separation"] = (0.0, 0.0, 0.0)
+            cohesion = np.zeros(3, dtype=float)
 
-        if model.target_position is not None:
-            goal = steer_toward(position, velocity, model.target_position, model.max_speed)
+        if has_neighbors and state.local_average_velocity is not None:
+            alignment = np.asarray(state.local_average_velocity, dtype=float) - velocity
+        else:
+            alignment = np.zeros(3, dtype=float)
+
+        separation = (
+            np.asarray(state.local_separation, dtype=float)
+            if state.local_separation is not None
+            else np.zeros(3, dtype=float)
+        )
+
+        components["cohesion"] = _to_vector3_tuple(cohesion)
+        components["alignment"] = _to_vector3_tuple(alignment)
+        components["separation"] = _to_vector3_tuple(separation)
+        acceleration += self.cohesion_weight * cohesion
+        acceleration += self.alignment_weight * alignment
+        acceleration += self.separation_weight * separation
+
+        if state.target_vector is not None:
+            target = position + np.asarray(state.target_vector, dtype=float)
+            goal = steer_toward(position, velocity, target, model.max_speed)
             components["goal"] = _to_vector3_tuple(goal)
             acceleration += self.goal_weight * goal
         else:
@@ -167,12 +161,16 @@ class BoidsPolicy:
         clipped = bool(np.linalg.norm(raw_acceleration) > model.max_acceleration)
         acceleration = clip_norm(raw_acceleration, model.max_acceleration)
 
-        action_type = "boids_steer"
+        action_type: ActionType = "boids_steer"
         if np.linalg.norm(boundary) > 0:
             action_type = "avoid_boundary"
-        elif neighbors and any(0.0 < distance < model.separation_distance for distance in distances):
+        elif (
+            has_neighbors
+            and state.nearest_neighbor_distance is not None
+            and 0.0 < state.nearest_neighbor_distance < model.separation_distance
+        ):
             action_type = "avoid_neighbor"
-        elif model.target_position is not None:
+        elif state.target_vector is not None:
             action_type = "return_to_base"
 
         return DroneAction(
