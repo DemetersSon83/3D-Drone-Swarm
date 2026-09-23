@@ -27,6 +27,8 @@ and observer choices can evolve without rerunning the simulations.
 - Dataset-level manifests, catalog, schema registry, Data Package descriptor,
   dataset card, DuckDB views, checksums, and validation report.
 - Loading helpers for pandas, PyArrow, Polars, and DuckDB.
+- Causal, observation-only replay and validation with explicit availability,
+  fixed-cohort frame admission, and bounded queue/duplicate storage.
 
 ## Architecture
 
@@ -115,6 +117,21 @@ Run the small CSV/JSONL smoke scenario:
 ```bash
 make run-smoke
 ```
+
+Replay an existing completed run and validate its pre-state observations:
+
+```bash
+drone-swarm replay outputs/swarm_dataset_v1/raw/<run_id> \
+  --output-directory outputs/observation_replay
+drone-swarm validate-observations outputs/observation_replay/observations.jsonl \
+  --metadata outputs/observation_replay/metadata.json
+```
+
+Replace `<run_id>` with the completed run's directory name. Replay preserves
+the source simulation units and interval; it is an unpaced logical stream, not
+a live sensor or real-time benchmark. See
+[`docs/OBSERVATION_REPLAY.md`](docs/OBSERVATION_REPLAY.md) for a runnable smoke
+example, causal timing modes, input gates, and frame/gap semantics.
 
 ## Launch the Phase I pilot
 
@@ -263,6 +280,7 @@ held-out treatment schedules in the next phase.
 - [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md): scenario and perturbation syntax.
 - [`docs/DATA_CONTRACT.md`](docs/DATA_CONTRACT.md): tables, keys, and semantics.
 - [`docs/PIPELINE_INTEGRATION.md`](docs/PIPELINE_INTEGRATION.md): analytical loading patterns.
+- [`docs/OBSERVATION_REPLAY.md`](docs/OBSERVATION_REPLAY.md): causal replay, observation validation, and bounded frame admission.
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md): identity, seeds, provenance, and restart behavior.
 - [`configs/analysis/phi_p_default.yaml`](configs/analysis/phi_p_default.yaml): starting observer specification for Phase II.
 

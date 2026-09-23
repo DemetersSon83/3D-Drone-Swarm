@@ -34,7 +34,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Life",
 ]
 dependencies = [
-  "mesa>=3.5.1,<4.0",
+  "mesa[network]>=3.5.1,<4.0",
   "numpy>=1.26",
   "pandas>=2.2",
   "PyYAML>=6.0",

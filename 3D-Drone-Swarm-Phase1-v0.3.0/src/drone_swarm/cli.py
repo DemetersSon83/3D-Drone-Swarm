@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from collections.abc import Sequence
@@ -121,12 +122,67 @@ def build_parser() -> argparse.ArgumentParser:
     schema_parser.add_argument("name", choices=("scenario", "artifact-manifest", "dataset-catalog"))
     schema_parser.add_argument("--output", type=Path, default=None)
 
+    replay_parser = subparsers.add_parser(
+        "replay", help="Replay observed pre-state kinematics on an explicit causal research clock."
+    )
+    replay_parser.add_argument("run_directory", type=Path)
+    replay_parser.add_argument("--output-directory", type=Path, required=True)
+    replay_parser.add_argument(
+        "--availability-basis",
+        choices=("completed_transition_lower_bound", "idealized_pre_state_replay"),
+        default="completed_transition_lower_bound",
+    )
+    replay_parser.add_argument("--frame-id", default="simulation_cartesian")
+    replay_parser.add_argument("--frame-origin", default="unspecified_legacy_simulation")
+    replay_parser.add_argument("--frame-handedness", default="unspecified_legacy_simulation")
+    replay_parser.add_argument("--max-tracks", type=int, default=128)
+    replay_parser.add_argument("--max-queued-frames", type=int, default=4)
+    replay_parser.add_argument("--allowed-lateness", type=float, default=None)
+    replay_parser.add_argument("--batch-size", type=int, default=1024)
+
+    observations_parser = subparsers.add_parser(
+        "validate-observations", help="Validate replay JSONL records and causal frame admission."
+    )
+    observations_parser.add_argument("input_file", type=Path)
+    observations_parser.add_argument("--metadata", type=Path, required=True)
+
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.command == "replay":
+        from drone_swarm.replay import ReplayOptions, replay_run
+
+        try:
+            result = replay_run(
+                ReplayOptions(
+                    run_directory=args.run_directory,
+                    output_directory=args.output_directory,
+                    availability_basis=args.availability_basis,
+                    frame_id=args.frame_id,
+                    frame_origin=args.frame_origin,
+                    frame_handedness=args.frame_handedness,
+                    max_tracks=args.max_tracks,
+                    max_queued_frames=args.max_queued_frames,
+                    allowed_lateness=args.allowed_lateness,
+                    batch_size=args.batch_size,
+                )
+            )
+        except (OSError, ValueError, RuntimeError, csv.Error) as exc:
+            print(json.dumps({"status": "fail", "error": str(exc)}), file=sys.stderr)
+            return 1
+        print(json.dumps(result, sort_keys=True))
+        return 0 if result["status"] == "pass" else 1
+
+    if args.command == "validate-observations":
+        from drone_swarm.replay import validate_observation_file
+
+        report = validate_observation_file(args.input_file, metadata_path=args.metadata)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report["status"] == "pass" else 1
 
     if args.command == "run":
         if args.force and args.resume:
