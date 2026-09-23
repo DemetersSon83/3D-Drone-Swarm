@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Added
+
+- Strict observation contract `0.1.0` and a pre-state-only adapter for completed
+  staged simulator runs, with explicit timing, units, quality, and covariance.
+- `replay` and `validate-observations` CLI commands with source integrity gates,
+  completed-transition and idealized availability modes, and atomic replay
+  artifacts with pass/fail reports.
+- Bounded fixed-cohort frame admission with immediate complete-frame release,
+  inclusive deadlines, explicit gap/capacity/duplicate/late-record events, and
+  history invalidation on identity or coordinate changes.
+- Regression coverage and observation-replay documentation. This stage adds no
+  topological/spectral features or real-time performance qualification.
+
+### Fixed
+
+- Install Mesa's network extra because Mesa 3.5.1 imports NetworkX during
+  initialization; a base installation must be able to run the simulator.
+- Move the CI workflow to the repository root so GitHub discovers it, install
+  visualization dependencies required by static checking, and exercise replay
+  and validation against generated CSV and Parquet runs.
+
 ## 0.3.1 — Parquet seed-schema hotfix
 
 ### Fixed
